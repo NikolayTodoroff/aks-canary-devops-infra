@@ -1,0 +1,24 @@
+namespace: voting
+
+image:
+  repository: ""
+  tag: ""
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+redis:
+  host: redis
+  password: ""
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 6
+  cpuUtilization: 70
