@@ -23,7 +23,7 @@ spec:
         nodepool-type: user
       containers:
         - name: voting-app
-          image: "{{ .Values.image.repository }}:{{ required \"image.tag must be provided\" .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ required "image.tag must be provided" .Values.image.tag }}"
           imagePullPolicy: Always
           ports:
             - containerPort: 80
