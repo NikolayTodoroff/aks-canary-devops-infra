@@ -24,11 +24,12 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 
   network_profile {
-    network_plugin      = "azure"
-    network_plugin_mode = "overlay"
-    dns_service_ip      = "10.2.0.10"
-    service_cidr        = "10.2.0.0/24"
-  }
+  network_plugin      = "azure"
+  network_plugin_mode = "overlay"
+  network_policy      = "azure"
+  dns_service_ip      = "10.2.0.10"
+  service_cidr        = "10.2.0.0/24"
+}
 
   azure_active_directory_role_based_access_control {
     azure_rbac_enabled     = true
