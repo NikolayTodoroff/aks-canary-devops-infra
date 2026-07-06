@@ -6,7 +6,6 @@ trigger:
     include:
       - app/**
       - helm/voting-stable/**
-      - helm/voting-infra/**
 
 parameters:
   - name: environment
@@ -54,53 +53,9 @@ stages:
                   app/azure-vote
                 docker push $(acrName).azurecr.io/$(imageRepository):$(imageTag)
 
-  - stage: SetupIngress
-    displayName: 'Setup Ingress Controller'
-    dependsOn: Build
-    condition: succeeded()
-    jobs:
-      - template: helm-deploy.yml
-        parameters:
-          stageName: 'SetupIngress'
-          displayName: 'Install ingress-nginx'
-          environment: ${{ parameters.environment }}
-          aksResourceGroup: $(aksResourceGroup)
-          aksClusterName: $(aksClusterName)
-          helmCommand: |
-            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-            helm repo update
-            helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-              --namespace ingress-nginx \
-              --create-namespace \
-              --set controller.replicaCount=1 \
-              --set controller.nodeSelector."nodepool-type"=user \
-              --wait \
-              --timeout 5m
-
-  - stage: DeployVotingInfra
-    displayName: 'Deploy voting-infra'
-    dependsOn: SetupIngress
-    condition: succeeded()
-    jobs:
-      - template: helm-deploy.yml
-        parameters:
-          stageName: 'DeployVotingInfra'
-          displayName: 'Helm Deploy voting-infra'
-          environment: ${{ parameters.environment }}
-          aksResourceGroup: $(aksResourceGroup)
-          aksClusterName: $(aksClusterName)
-          helmCommand: |
-            helm upgrade --install voting-infra helm/voting-infra \
-              --values helm/voting-infra/values.yml \
-              --values helm/voting-infra/values-${{ parameters.environment }}.yml \
-              --namespace voting \
-              --create-namespace \
-              --wait \
-              --timeout 5m
-
   - stage: DeployStable
     displayName: 'Deploy voting-stable'
-    dependsOn: DeployVotingInfra
+    dependsOn: Build
     condition: succeeded()
     jobs:
       - template: helm-deploy.yml

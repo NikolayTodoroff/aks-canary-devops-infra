@@ -1,0 +1,72 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - helm/voting-infra/**
+
+parameters:
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: 'dev'
+    values:
+      - dev
+      - prod
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if eq(parameters.environment, 'dev') }}:
+    - group: akscanaryado-dev-vars
+  - ${{ if eq(parameters.environment, 'prod') }}:
+    - group: akscanaryado-prod-vars
+  - name: aksResourceGroup
+    value: 'rg-main-akscanaryado-${{ parameters.environment }}'
+  - name: aksClusterName
+    value: 'aks-akscanaryado-${{ parameters.environment }}'
+
+stages:
+  - stage: SetupIngress
+    displayName: 'Setup Ingress Controller'
+    jobs:
+      - template: helm-deploy.yml
+        parameters:
+          stageName: 'SetupIngress'
+          displayName: 'Install ingress-nginx'
+          environment: ${{ parameters.environment }}
+          aksResourceGroup: $(aksResourceGroup)
+          aksClusterName: $(aksClusterName)
+          helmCommand: |
+            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+            helm repo update
+            helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+              --namespace ingress-nginx \
+              --create-namespace \
+              --set controller.replicaCount=1 \
+              --set controller.nodeSelector."nodepool-type"=user \
+              --wait \
+              --timeout 5m
+
+  - stage: DeployVotingInfra
+    displayName: 'Deploy voting-infra'
+    dependsOn: SetupIngress
+    condition: succeeded()
+    jobs:
+      - template: helm-deploy.yml
+        parameters:
+          stageName: 'DeployVotingInfra'
+          displayName: 'Helm Deploy voting-infra'
+          environment: ${{ parameters.environment }}
+          aksResourceGroup: $(aksResourceGroup)
+          aksClusterName: $(aksClusterName)
+          helmCommand: |
+            helm upgrade --install voting-infra helm/voting-infra \
+              --values helm/voting-infra/values.yml \
+              --values helm/voting-infra/values-${{ parameters.environment }}.yml \
+              --namespace voting \
+              --create-namespace \
+              --wait \
+              --timeout 5m
