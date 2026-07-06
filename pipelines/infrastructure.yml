@@ -1,0 +1,62 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/**
+
+parameters:
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: 'dev'
+    values:
+      - dev
+      - prod
+  - name: terraformAction
+    displayName: 'Terraform Action'
+    type: string
+    default: 'plan'
+    values:
+      - plan
+      - apply
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if eq(parameters.environment, 'dev') }}:
+    - group: akscanaryado-dev-vars
+  - ${{ if eq(parameters.environment, 'prod') }}:
+    - group: akscanaryado-prod-vars
+  - name: terraformVersion
+    value: '1.15.5'
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)/infra/main'
+  - name: backendResourceGroup
+    value: 'rg-tfstate-${{ parameters.environment }}'
+  - name: backendStorageAccount
+    value: 'stakscanaryado${{ parameters.environment }}'
+  - name: backendContainer
+    value: 'tfstate'
+  - name: backendKey
+    value: 'akscanaryado-${{ parameters.environment }}.tfstate'
+  - name: tfVarsFile
+    value: '$(System.DefaultWorkingDirectory)/infra/env/${{ parameters.environment }}.tfvars'
+
+stages:
+  - stage: Terraform
+    displayName: 'Terraform ${{ parameters.terraformAction }} — ${{ parameters.environment }}'
+    jobs:
+      - template: templates/terraform.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          terraformAction: ${{ parameters.terraformAction }}
+          workingDirectory: $(workingDirectory)
+          backendResourceGroup: $(backendResourceGroup)
+          backendStorageAccount: $(backendStorageAccount)
+          backendContainer: $(backendContainer)
+          backendKey: $(backendKey)
+          tfVarsFile: $(tfVarsFile)
+          terraformVersion: $(terraformVersion)

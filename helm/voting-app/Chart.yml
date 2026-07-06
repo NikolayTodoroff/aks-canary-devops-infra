@@ -1,6 +1,0 @@
-apiVersion: v2
-name: voting-infra
-description: Shared cluster infrastructure for the voting app — Redis, Ingress, RBAC
-type: application
-version: 0.1.0
-appVersion: "1.0"

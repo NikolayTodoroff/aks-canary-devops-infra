@@ -1,0 +1,101 @@
+parameters:
+  - name: environment
+    type: string
+  - name: terraformAction
+    type: string
+  - name: workingDirectory
+    type: string
+  - name: backendResourceGroup
+    type: string
+  - name: backendStorageAccount
+    type: string
+  - name: backendContainer
+    type: string
+  - name: backendKey
+    type: string
+  - name: tfVarsFile
+    type: string
+  - name: terraformVersion
+    type: string
+
+jobs:
+  - deployment: Terraform
+    displayName: 'Terraform ${{ parameters.terraformAction }}'
+    environment: 'infrastructure-${{ parameters.environment }}'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: TerraformInstaller@1
+              displayName: 'Install Terraform'
+              inputs:
+                terraformVersion: ${{ parameters.terraformVersion }}
+
+            - bash: |
+                terraform fmt -check -recursive
+              displayName: 'Terraform Format Check'
+              workingDirectory: ${{ parameters.workingDirectory }}
+
+            - task: TerraformTaskV4@4
+              displayName: 'Terraform Init'
+              inputs:
+                command: 'init'
+                workingDirectory: ${{ parameters.workingDirectory }}
+                backendServiceArm: 'service_connection'
+                backendAzureRmResourceGroupName: ${{ parameters.backendResourceGroup }}
+                backendAzureRmStorageAccountName: ${{ parameters.backendStorageAccount }}
+                backendAzureRmContainerName: ${{ parameters.backendContainer }}
+                backendAzureRmKey: ${{ parameters.backendKey }}
+
+            - task: TerraformTaskV4@4
+              displayName: 'Terraform Validate'
+              inputs:
+                command: 'validate'
+                workingDirectory: ${{ parameters.workingDirectory }}
+
+            - bash: |
+                curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+              displayName: 'Install TFLint'
+
+            - bash: |
+                tflint --init --config=../.tflint.hcl
+                tflint --config=../.tflint.hcl
+              displayName: 'Run TFLint'
+              workingDirectory: ${{ parameters.workingDirectory }}
+
+            - task: TerraformTaskV4@4
+              displayName: 'Terraform Plan'
+              condition: or(eq('${{ parameters.terraformAction }}', 'plan'), eq('${{ parameters.terraformAction }}', 'apply'))
+              inputs:
+                command: 'plan'
+                workingDirectory: ${{ parameters.workingDirectory }}
+                environmentServiceNameAzureRM: 'service_connection'
+                commandOptions: '-var-file="${{ parameters.tfVarsFile }}" -out=$(System.DefaultWorkingDirectory)/tfplan'
+              env:
+                TF_VAR_pipeline_sp_object_id: $(pipelineSpObjectId)
+                TF_VAR_aks_admin_group_object_id: $(aksAdminGroupObjectId)
+
+            - task: PublishPipelineArtifact@1
+              displayName: 'Publish Plan'
+              condition: or(eq('${{ parameters.terraformAction }}', 'plan'), eq('${{ parameters.terraformAction }}', 'apply'))
+              inputs:
+                targetPath: '$(System.DefaultWorkingDirectory)/tfplan'
+                artifactName: 'tfplan-${{ parameters.environment }}'
+
+            - task: DownloadPipelineArtifact@2
+              displayName: 'Download Plan'
+              condition: eq('${{ parameters.terraformAction }}', 'apply')
+              inputs:
+                artifactName: 'tfplan-${{ parameters.environment }}'
+                targetPath: '$(System.DefaultWorkingDirectory)'
+
+            - task: TerraformTaskV4@4
+              displayName: 'Terraform Apply'
+              condition: eq('${{ parameters.terraformAction }}', 'apply')
+              inputs:
+                command: 'apply'
+                workingDirectory: ${{ parameters.workingDirectory }}
+                environmentServiceNameAzureRM: 'service_connection'
+                commandOptions: '$(System.DefaultWorkingDirectory)/tfplan'
