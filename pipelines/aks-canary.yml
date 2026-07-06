@@ -1,0 +1,68 @@
+trigger: none
+
+parameters:
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: 'prod'
+    values:
+      - dev
+      - prod
+  - name: imageTag
+    displayName: 'Image tag to deploy as canary (Build.BuildId from stable run)'
+    type: string
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - ${{ if eq(parameters.environment, 'dev') }}:
+    - group: akscanaryado-dev-vars
+  - ${{ if eq(parameters.environment, 'prod') }}:
+    - group: akscanaryado-prod-vars
+  - name: acrName
+    value: 'acrakscanaryado${{ parameters.environment }}'
+  - name: aksResourceGroup
+    value: 'rg-main-akscanaryado-${{ parameters.environment }}'
+  - name: aksClusterName
+    value: 'aks-akscanaryado-${{ parameters.environment }}'
+  - name: imageRepository
+    value: 'azure-vote-front'
+
+stages:
+  - stage: DeployCanary
+    displayName: 'Deploy voting-canary'
+    jobs:
+      - template: helm-deploy.yml
+        parameters:
+          stageName: 'DeployCanary'
+          displayName: 'Helm Deploy voting-canary'
+          environment: ${{ parameters.environment }}
+          aksResourceGroup: $(aksResourceGroup)
+          aksClusterName: $(aksClusterName)
+          helmCommand: |
+            echo "Checking image tag exists before Helm deploy..."
+            echo "Image: $(acrName).azurecr.io/$(imageRepository):${{ parameters.imageTag }}"
+
+            TAG_EXISTS=$(az acr repository show-tags \
+              --name $(acrName) \
+              --repository $(imageRepository) \
+              --query "[?@=='${{ parameters.imageTag }}']" \
+              -o tsv)
+
+            if [ -z "$TAG_EXISTS" ]; then
+              echo "ERROR: Image tag '${{ parameters.imageTag }}' does not exist in ACR '$(acrName)' repository '$(imageRepository)'"
+              exit 1
+            fi
+
+            echo "Image tag exists. Continuing with Helm deploy..."
+
+            helm upgrade --install voting-canary helm/voting-canary \
+              --values helm/voting-canary/values.yml \
+              --values helm/voting-canary/values-${{ parameters.environment }}.yml \
+              --set-string image.repository=$(acrName).azurecr.io/$(imageRepository) \
+              --set-string image.tag=${{ parameters.imageTag }} \
+              --namespace voting \
+              --create-namespace \
+              --wait \
+              --timeout 5m

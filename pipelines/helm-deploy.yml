@@ -1,0 +1,45 @@
+parameters:
+  - name: stageName
+    type: string
+  - name: displayName
+    type: string
+  - name: environment
+    type: string
+  - name: aksResourceGroup
+    type: string
+  - name: aksClusterName
+    type: string
+  - name: helmCommand
+    type: string
+
+jobs:
+  - deployment: ${{ parameters.stageName }}
+    displayName: ${{ parameters.displayName }}
+    environment: 'application-${{ parameters.environment }}'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: AzureCLI@2
+              displayName: 'Get AKS Credentials'
+              inputs:
+                azureSubscription: 'service_connection'
+                scriptType: 'bash'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  az aks install-cli
+                  az aks get-credentials \
+                    --resource-group ${{ parameters.aksResourceGroup }} \
+                    --name ${{ parameters.aksClusterName }} \
+                    --overwrite-existing
+                  kubelogin convert-kubeconfig -l azurecli
+
+            - task: AzureCLI@2
+              displayName: ${{ parameters.displayName }}
+              inputs:
+                azureSubscription: 'service_connection'
+                scriptType: 'bash'
+                scriptLocation: 'inlineScript'
+                inlineScript: ${{ parameters.helmCommand }}
