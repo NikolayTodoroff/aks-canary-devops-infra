@@ -43,13 +43,13 @@ variables:
   - name: backendKey
     value: 'akscanaryado-${{ parameters.environment }}.tfstate'
   - name: tfVarsFile
-    value: '$(System.DefaultWorkingDirectory)/infra/env/${{ parameters.environment }}.tfvars'
+    value: '../env/${{ parameters.environment }}.tfvars'
 
 stages:
   - stage: Terraform
     displayName: 'Terraform ${{ parameters.terraformAction }} — ${{ parameters.environment }}'
     jobs:
-      - template: templates/terraform.yml
+      - template: terraform.yml
         parameters:
           environment: ${{ parameters.environment }}
           terraformAction: ${{ parameters.terraformAction }}
